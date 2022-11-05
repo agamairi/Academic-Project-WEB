@@ -1,3 +1,9 @@
+// NAME: Agam Airi
+// STUDENT ID: 116731217
+// EMAIL: aairi@myseneca.ca
+// SUBJECT: web322
+// I have done all this work by myself and have not copied it from anywhere
+
 const express = require("express");
 const app = express();
 const path = require("path");
