@@ -7,7 +7,7 @@ const fs = require("fs");
 const exphbs = require("express-handlebars");
 const { equal } = require("assert");
 
-const HTTP_PORT = process.env.PORT || 8080;
+const HTTP_PORT = process.env.PORT || 3000;
 
 app.use(express.static("public"));
 app.use(express.urlencoded({extended: true}));
