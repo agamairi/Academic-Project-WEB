@@ -7,25 +7,47 @@
 
 const express = require("express");
 const path = require("path");
-const data = require("./data-service");
-const multer = require("multer");
+const data = require("./data-service.js");
 const fs = require("fs");
+const multer = require("multer");
 const exphbs = require("express-handlebars");
-// const { equal } = require("assert");
-
 const app = express();
+const dataServiceAuth = require("./data-service-auth");
+const clientSessions = require("client-sessions");
 
+const HTTP_PORT = process.env.PORT || 8080;
 
-const HTTP_PORT = process.env.PORT || 3000;
-app.use(express.static("public"));
-app.use(express.urlencoded({ extended: true }));
+const onHTTPStart = () => {
+  console.log("Express http server listening on port " + HTTP_PORT);
+};
+
+// middleware
+app.use(
+  clientSessions({
+    cookieName: "session",
+    secret: "web_322_app_assignment_6",
+    duration: 2 * 60 * 1000,
+    activeDuration: 1000 * 60,
+  })
+);
+
+app.use((req, res, next) => {
+  res.locals.session = req.session;
+  next();
+});
+
+const ensureLogin = (req, res, next) => {
+  if (!req.session.user) res.redirect("/login");
+  else next();
+};
+
 app.engine(
   ".hbs",
   exphbs.engine({
     extname: ".hbs",
     defaultLayout: "main",
     helpers: {
-      navLink: function (url, options) {
+      navLink: (url, options) => {
         return (
           "<li" +
           (url == app.locals.activeRoute ? ' class="active" ' : "") +
@@ -36,7 +58,7 @@ app.engine(
           "</a></li>"
         );
       },
-      equal: function (lvalue, rvalue, options) {
+      equal: (lvalue, rvalue, options) => {
         if (arguments.length < 3)
           throw new Error("Handlebars Helper equal needs 2 parameters");
         if (lvalue != rvalue) {
@@ -48,11 +70,12 @@ app.engine(
     },
   })
 );
+
 app.set("view engine", ".hbs");
 
-function onHTTPStart() {
-  console.log("Express http server listening on port " + HTTP_PORT);
-}
+app.use(express.static("public"));
+
+app.use(express.urlencoded({ extended: true }));
 
 const storage = multer.diskStorage({
   destination: "./public/images/uploaded",
@@ -63,7 +86,8 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-app.use(function (req, res, next) {
+// get requests
+app.use((req, res, next) => {
   let route = req.baseUrl + req.path;
   app.locals.activeRoute = route == "/" ? "/" : route.replace(/\/$/, "");
   next();
@@ -77,7 +101,7 @@ app.get("/about", (req, res) => {
   res.render("about");
 });
 
-app.get("/students", (req, res) => {
+app.get("/students", ensureLogin, (req, res) => {
   if (req.query.status) {
     data
       .getStudentsByStatus(req.query.status)
@@ -87,7 +111,7 @@ app.get("/students", (req, res) => {
           res.render("students", { message: "No Students in the database." });
       })
       .catch((err) => {
-        res.status(500).send({ Message: "Error when calling getStudentsByStudents" });
+        res.status(500).send({ Message: "Error" });
       });
   } else if (req.query.program) {
     data
@@ -98,7 +122,7 @@ app.get("/students", (req, res) => {
           res.render("students", { message: "No Students in the database." });
       })
       .catch((err) => {
-        res.status(500).send({ Message: "Error when calling getStudentsByProgramCode" });
+        res.status(500).send({ Message: "Error" });
       });
   } else if (req.query.credential) {
     data
@@ -109,7 +133,7 @@ app.get("/students", (req, res) => {
           res.render("students", { message: "No Students in the database." });
       })
       .catch((err) => {
-        res.status(500).send({ Message: "Error when calling getStudentsByExpectedCredential" });
+        res.status(500).send({ Message: "Error" });
       });
   } else {
     data
@@ -120,12 +144,12 @@ app.get("/students", (req, res) => {
           res.render("students", { message: "No Students in the database." });
       })
       .catch((err) => {
-        res.status(500).send({ Message: "Error when calling getAllStudents" });
+        res.status(500).send({ Message: "Error" });
       });
   }
 });
 
-app.get("/programs", (req, res) => {
+app.get("/programs", ensureLogin, (req, res) => {
   data
     .getPrograms()
     .then((data) => {
@@ -133,11 +157,11 @@ app.get("/programs", (req, res) => {
       else res.render("programs", { message: "No Programs in the database." });
     })
     .catch((err) => {
-      res.status(500).send({ Message: "Error when calling getPrograms" });
+      res.status(500).send({ Message: "Error" });
     });
 });
 
-app.get("/students/add", (req, res) => {
+app.get("/students/add", ensureLogin, (req, res) => {
   data
     .getPrograms()
     .then((data) => {
@@ -148,11 +172,11 @@ app.get("/students/add", (req, res) => {
     });
 });
 
-app.get("/images/add", (req, res) => {
+app.get("/images/add", ensureLogin, (req, res) => {
   res.render("addImage");
 });
 
-app.get("/images", (req, res) => {
+app.get("/images", ensureLogin, (req, res) => {
   fs.readdir("./public/images/uploaded", (err, data) => {
     if (err) console.log("Error in reading the directory.");
     else {
@@ -161,7 +185,7 @@ app.get("/images", (req, res) => {
   });
 });
 
-app.get("/student/:studentId", (req, res) => {
+app.get("/student/:studentId", ensureLogin, (req, res) => {
   let viewData = {};
   data
     .getStudentById(req.params.studentId)
@@ -193,11 +217,11 @@ app.get("/student/:studentId", (req, res) => {
     });
 });
 
-app.get("/programs/add", (req, res) => {
+app.get("/programs/add", ensureLogin, (req, res) => {
   res.render("addProgram");
 });
 
-app.get("/program/:programCode", (req, res) => {
+app.get("/program/:programCode", ensureLogin, (req, res) => {
   data
     .getProgramByCode(req.params.programCode)
     .then((data) => {
@@ -207,7 +231,7 @@ app.get("/program/:programCode", (req, res) => {
     .catch(() => res.status(404).send("Program Not Found"));
 });
 
-app.get("/program/delete/:programCode", (req, res) => {
+app.get("/program/delete/:programCode", ensureLogin, (req, res) => {
   data
     .deleteProgramByCode(req.params.programCode)
     .then(() => {
@@ -218,7 +242,7 @@ app.get("/program/delete/:programCode", (req, res) => {
     });
 });
 
-app.get("/student/delete/:studentID", (req, res) => {
+app.get("/student/delete/:studentID", ensureLogin, (req, res) => {
   data
     .deleteStudentById(req.params.studentID)
     .then(() => {
@@ -229,20 +253,40 @@ app.get("/student/delete/:studentID", (req, res) => {
     });
 });
 
-app.post("/images/add", upload.single("imageFile"), (req, res) => {
+app.get("/login", (req, res) => {
+  res.render("login");
+});
+
+app.get("/register", (req, res) => {
+  res.render("register");
+});
+
+app.get("/logout", (req, res) => {
+  req.session.reset();
+  res.redirect("/");
+});
+
+app.get("/userHistory", ensureLogin, (req, res) => {
+  res.render("userHistory");
+});
+
+// post requests
+app.post("/images/add", ensureLogin, upload.single("imageFile"), (req, res) => {
   res.redirect("/images");
 });
 
-app.post("/students/add", (req, res) => {
+app.post("/students/add", ensureLogin, (req, res) => {
   data
     .addStudent(req.body)
-    .then(res.redirect("/students"))
+    .then(() => {
+      res.redirect("/students");
+    })
     .catch((err) => {
       res.status(500).send("Unable to Add Student");
     });
 });
 
-app.post("/student/update", (req, res) => {
+app.post("/student/update", ensureLogin, (req, res) => {
   data
     .updateStudent(req.body)
     .then(() => {
@@ -253,7 +297,7 @@ app.post("/student/update", (req, res) => {
     });
 });
 
-app.post("/programs/add", (req, res) => {
+app.post("/programs/add", ensureLogin, (req, res) => {
   data
     .addProgram(req.body)
     .then(() => {
@@ -264,7 +308,7 @@ app.post("/programs/add", (req, res) => {
     });
 });
 
-app.post("/program/update", (req, res) => {
+app.post("/program/update", ensureLogin, (req, res) => {
   data
     .updateProgram(req.body)
     .then(() => {
@@ -272,6 +316,37 @@ app.post("/program/update", (req, res) => {
     })
     .catch((err) => {
       res.status(500).send("There was an error", err);
+    });
+});
+
+app.post("/register", (req, res) => {
+  dataServiceAuth
+    .registerUser(req.body)
+    .then(() => {
+      res.render("register", { successMessage: "User created" });
+    })
+    .catch((err) => {
+      res.render("register", {
+        errorMessage: err,
+        userName: req.body.userName,
+      });
+    });
+});
+
+app.post("/login", (req, res) => {
+  req.body.userAgent = req.get("User-Agent");
+  dataServiceAuth
+    .checkUser(req.body)
+    .then((user) => {
+      req.session.user = {
+        userName: user[0].userName,
+        email: user[0].email,
+        loginHistory: user[0].loginHistory,
+      };
+      res.redirect("/students");
+    })
+    .catch((err) => {
+      res.render("login", { errorMessage: err, userName: req.body.userName });
     });
 });
 
@@ -285,9 +360,10 @@ app.use((req, res) => {
 
 data
   .initialize()
+  .then(dataServiceAuth.initialize())
   .then(() => {
     app.listen(HTTP_PORT, onHTTPStart);
   })
   .catch((err) => {
-    res.status(500).send("Error in initializing the data.");
+    console.log("Error in initializing the data.");
   });
